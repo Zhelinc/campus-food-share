@@ -1,0 +1,18 @@
+# Node.js
+node_modules/
+.env
+*.log
+
+# Build outputs
+backend/dist/
+frontend/build/
+frontend/.env
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+backend/src/config/*.json

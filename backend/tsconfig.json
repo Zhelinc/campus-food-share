@@ -1,0 +1,50 @@
+{
+  // Visit https://aka.ms/tsconfig to read more about this file
+  "compilerOptions": {
+    // File Layout
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Environment Settings
+    "module": "CommonJS",
+    "target": "ES2020",
+    "types": ["node"],
+    // 新增：后端Node.js项目必需（方案要求，原始配置缺失）
+    "moduleResolution": "node",
+    // 新增：解决CommonJS模块兼容问题（方案要求，原始配置缺失）
+    "esModuleInterop": true,
+    // 新增：强制文件名大小写一致（方案要求，原始配置缺失）
+    "forceConsistentCasingInFileNames": true,
+
+    // Other Outputs（保留原始有用配置，不影响后端）
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Stricter Typechecking Options（保留原始严格校验，提升代码质量）
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Style Options（保留注释，后续可按需启用）
+    // "noImplicitReturns": true,
+    // "noImplicitOverride": true,
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    // "noFallthroughCasesInSwitch": true,
+    // "noPropertyAccessFromIndexSignature": true,
+
+    // Recommended Options
+    "strict": true,
+    "skipLibCheck": true,
+    // 移除：后端项目不需要JSX支持（原始配置保留会冗余，不报错但无用）
+    // "jsx": "react-jsx",
+    // 移除：后端CommonJS模块不需要该语法（可能导致导入报错）
+    // "verbatimModuleSyntax": true,
+    // 移除：后端非TSX项目，该配置无用
+    // "isolatedModules": true,
+    // 移除：方案未要求，且后端少见该场景
+    // "noUncheckedSideEffectImports": true,
+    // 移除：CommonJS模块自动检测，无需强制
+    // "moduleDetection": "force"
+  }
+}

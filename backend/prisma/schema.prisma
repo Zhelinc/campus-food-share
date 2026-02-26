@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id
+  firebaseUid String   @unique
+  email       String   @unique
+  password    String?  // 哈希密码
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  role        String   @default("user")
+  Claim       Claim[]
+  Food        Food[]
+  Notification Notification[]
+}
+
+model Food {
+  id          String   @id
+  title       String
+  description String
+  allergens   String[]
+  campus      String   @default("伦敦")  // 新增校区
+  location    String                    // 分享地址
+  quality     String
+  imageUrl    String?
+  status      String   @default("AVAILABLE")
+  publisherId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Claim       Claim?
+  User        User     @relation(fields: [publisherId], references: [id])
+}
+
+model Claim {
+  id         String   @id
+  foodId     String   @unique
+  claimantId String
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  User       User     @relation(fields: [claimantId], references: [id])
+  Food       Food     @relation(fields: [foodId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String   // 'CLAIM', 'CLAIM_CONFIRMED', 'FOOD_DELETED'
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id])
+}
