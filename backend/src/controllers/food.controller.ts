@@ -244,7 +244,16 @@ export const getFoodList = async (req: Request, res: Response) => {
 
     const where: any = {};
     if (status) where.status = status;
-    if (allergens) where.allergens = { hasSome: (allergens as string).split(',') };
+    if (allergens) {
+  try {
+    const allergenList = (allergens as string).split(',').filter(a => a.trim());
+    if (allergenList.length > 0) {
+      where.allergens = { hasSome: allergenList };
+    }
+  } catch (e) {
+    console.error('过敏原查询参数错误:', e);
+  }
+}
     if (quality) where.quality = quality;
     if (campus) where.campus = campus as string;
     if (location) where.location = { contains: location as string };
