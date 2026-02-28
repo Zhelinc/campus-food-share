@@ -214,6 +214,7 @@ export const deleteFood = async (req: Request, res: Response) => {
       });
     }
 
+    // 如果该食物已被认领，给认领者发送通知
     if (food.Claim) {
       await prisma.notification.create({
         data: {
@@ -221,13 +222,21 @@ export const deleteFood = async (req: Request, res: Response) => {
           userId: food.Claim.claimantId,
           type: 'FOOD_DELETED',
           content: `您认领的食物 "${food.title}" 已被发布者删除。`,
+          createdAt: new Date(), // 新增
           updatedAt: new Date(),
         }
       });
     }
 
-    await prisma.claim.deleteMany({ where: { foodId: foodId } });
-    await prisma.food.delete({ where: { id: foodId } });
+    // 先删除关联的认领记录
+    await prisma.claim.deleteMany({
+      where: { foodId: foodId }
+    });
+
+    // 再删除食物
+    await prisma.food.delete({
+      where: { id: foodId }
+    });
 
     return res.status(200).json({
       message: '食物删除成功',
@@ -368,12 +377,14 @@ export const claimFood = async (req: Request, res: Response) => {
       data: { status: 'CLAIMED', updatedAt: new Date() }
     });
 
+    // 为发布者创建通知
     await prisma.notification.create({
       data: {
         id: generateId(),
         userId: food.publisherId,
         type: 'CLAIM',
         content: `您的食物 "${food.title}" 被用户 ${claimant.email} 认领，请及时确认。`,
+        createdAt: new Date(), // 新增
         updatedAt: new Date(),
       }
     });
@@ -448,12 +459,14 @@ export const confirmClaim = async (req: Request, res: Response) => {
       data: { status: 'COMPLETED', updatedAt: new Date() }
     });
 
+    // 为认领者创建通知
     await prisma.notification.create({
       data: {
         id: generateId(),
         userId: claim.claimantId,
         type: 'CLAIM_CONFIRMED',
         content: `您认领的食物 "${claim.Food.title}" 已被发布者确认，可以取餐了。`,
+        createdAt: new Date(), // 新增
         updatedAt: new Date(),
       }
     });
