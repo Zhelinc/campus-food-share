@@ -208,7 +208,7 @@ export const getUserInfo = async (req: Request, res: Response) => {
       user: {  
         ...userWithoutPassword,  
         publishedFoods: dbUser.Food,  
-        claimedFoods: dbUser.Claim.map(c => c.Food)  
+       claimedFoods: dbUser.Claim.map((c: any) => c.Food) 
       }  
     });  
   } catch (error: any) {  
