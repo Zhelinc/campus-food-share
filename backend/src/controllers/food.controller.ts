@@ -1,13 +1,39 @@
 // backend/src/controllers/food.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../utils/db';
-import { generateId } from '../utils/idGenerator'; // 请确保此文件存在并导出 generateId
+import { generateId } from '../utils/idGenerator';
+import { z } from 'zod';
+
+// ==================== 验证 Schema ====================
+const publishFoodSchema = z.object({
+  title: z.string().min(1, '标题不能为空'),
+  description: z.string().min(1, '描述不能为空'),
+  campus: z.string().min(1, '校区不能为空'),
+  location: z.string().min(1, '分享地址不能为空'),
+  quality: z.string().min(1, '质量不能为空'),
+  allergens: z.array(z.string()).optional(),
+  imageUrl: z.string().url('图片 URL 格式不正确').optional(),
+});
+
+const editFoodSchema = publishFoodSchema.extend({
+  foodId: z.string().min(1, '食物 ID 不能为空'),
+  status: z.string().optional(),
+});
+
+const claimFoodSchema = z.object({
+  foodId: z.string().min(1, '食物 ID 不能为空'),
+});
+
+// ==================== 控制器函数 ====================
 
 /**
  * 发布食物接口
  */
 export const publishFood = async (req: Request, res: Response) => {
   try {
+    const validated = publishFoodSchema.parse(req.body);
+    const { title, description, allergens, campus, location, quality, imageUrl } = validated;
+
     const user = req.user;
     if (!user) {
       return res.status(401).json({
@@ -16,17 +42,7 @@ export const publishFood = async (req: Request, res: Response) => {
       });
     }
 
-    const { title, description, allergens, campus, location, quality, imageUrl } = req.body;
-
-    // 校验必填项
-    if (!title || !description || !campus || !location || !quality) {
-      return res.status(400).json({
-        message: '标题、描述、校区、分享地址、质量为必填项',
-        errorCode: 'food/missing-params'
-      });
-    }
-
-    // 查找/创建用户（需提供 id 和 updatedAt）
+    // 查找/创建用户
     let dbUser = await prisma.user.findUnique({
       where: { firebaseUid: user.uid }
     });
@@ -41,7 +57,6 @@ export const publishFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 创建食物记录
     const food = await prisma.food.create({
       data: {
         id: generateId(),
@@ -56,7 +71,7 @@ export const publishFood = async (req: Request, res: Response) => {
         updatedAt: new Date(),
       },
       include: {
-        User: { select: { email: true } } // 关联发布者信息，字段名为 User
+        User: { select: { email: true } }
       }
     });
 
@@ -67,6 +82,12 @@ export const publishFood = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        message: '输入验证失败',
+        errors: error.errors
+      });
+    }
     console.error('发布食物失败：', error);
     return res.status(500).json({
       message: '发布失败',
@@ -81,6 +102,9 @@ export const publishFood = async (req: Request, res: Response) => {
  */
 export const editFood = async (req: Request, res: Response) => {
   try {
+    const validated = editFoodSchema.parse(req.body);
+    const { foodId, title, description, allergens, campus, location, quality, imageUrl, status } = validated;
+
     const user = req.user;
     if (!user) {
       return res.status(401).json({
@@ -89,16 +113,6 @@ export const editFood = async (req: Request, res: Response) => {
       });
     }
 
-    const { foodId, title, description, allergens, campus, location, quality, imageUrl, status } = req.body;
-
-    if (!foodId) {
-      return res.status(400).json({
-        message: '食物ID为必填项',
-        errorCode: 'food/missing-food-id'
-      });
-    }
-
-    // 查找食物，并包含发布者信息
     const food = await prisma.food.findUnique({
       where: { id: foodId },
       include: { User: true }
@@ -110,7 +124,6 @@ export const editFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 验证发布者身份
     const dbUser = await prisma.user.findUnique({
       where: { firebaseUid: user.uid }
     });
@@ -121,7 +134,6 @@ export const editFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 构建更新数据（只更新传入的字段）
     const updateData: any = {};
     if (title) updateData.title = title;
     if (description) updateData.description = description;
@@ -131,7 +143,7 @@ export const editFood = async (req: Request, res: Response) => {
     if (quality) updateData.quality = quality;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
     if (status) updateData.status = status;
-    updateData.updatedAt = new Date(); // 手动更新 updatedAt
+    updateData.updatedAt = new Date();
 
     const updatedFood = await prisma.food.update({
       where: { id: foodId },
@@ -145,6 +157,12 @@ export const editFood = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        message: '输入验证失败',
+        errors: error.errors
+      });
+    }
     console.error('编辑食物失败：', error);
     return res.status(500).json({
       message: '编辑失败',
@@ -159,14 +177,6 @@ export const editFood = async (req: Request, res: Response) => {
  */
 export const deleteFood = async (req: Request, res: Response) => {
   try {
-    const user = req.user;
-    if (!user) {
-      return res.status(401).json({
-        message: '未登录',
-        errorCode: 'auth/unauthorized'
-      });
-    }
-
     const { foodId } = req.body;
     if (!foodId) {
       return res.status(400).json({
@@ -175,7 +185,14 @@ export const deleteFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 查找食物，包含可能的认领信息
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        message: '未登录',
+        errorCode: 'auth/unauthorized'
+      });
+    }
+
     const food = await prisma.food.findUnique({
       where: { id: foodId },
       include: { User: true, Claim: true }
@@ -197,7 +214,6 @@ export const deleteFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 如果该食物已被认领，给认领者发送通知
     if (food.Claim) {
       await prisma.notification.create({
         data: {
@@ -210,15 +226,8 @@ export const deleteFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 先删除关联的认领记录
-    await prisma.claim.deleteMany({
-      where: { foodId: foodId }
-    });
-
-    // 再删除食物
-    await prisma.food.delete({
-      where: { id: foodId }
-    });
+    await prisma.claim.deleteMany({ where: { foodId: foodId } });
+    await prisma.food.delete({ where: { id: foodId } });
 
     return res.status(200).json({
       message: '食物删除成功',
@@ -236,7 +245,7 @@ export const deleteFood = async (req: Request, res: Response) => {
 };
 
 /**
- * 获取食物列表接口（支持筛选：校区、状态、过敏原、质量、分享地址、关键词）
+ * 获取食物列表接口
  */
 export const getFoodList = async (req: Request, res: Response) => {
   try {
@@ -245,15 +254,15 @@ export const getFoodList = async (req: Request, res: Response) => {
     const where: any = {};
     if (status) where.status = status;
     if (allergens) {
-  try {
-    const allergenList = (allergens as string).split(',').filter(a => a.trim());
-    if (allergenList.length > 0) {
-      where.allergens = { hasSome: allergenList };
+      try {
+        const allergenList = (allergens as string).split(',').filter(a => a.trim());
+        if (allergenList.length > 0) {
+          where.allergens = { hasSome: allergenList };
+        }
+      } catch (e) {
+        console.error('过敏原查询参数错误:', e);
+      }
     }
-  } catch (e) {
-    console.error('过敏原查询参数错误:', e);
-  }
-}
     if (quality) where.quality = quality;
     if (campus) where.campus = campus as string;
     if (location) where.location = { contains: location as string };
@@ -267,8 +276,8 @@ export const getFoodList = async (req: Request, res: Response) => {
     const foods = await prisma.food.findMany({
       where,
       include: {
-        User: { select: { email: true } },          // 发布者信息
-        Claim: { select: { User: { select: { email: true } } } } // 认领者信息
+        User: { select: { email: true } },
+        Claim: { select: { User: { select: { email: true } } } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -294,6 +303,9 @@ export const getFoodList = async (req: Request, res: Response) => {
  */
 export const claimFood = async (req: Request, res: Response) => {
   try {
+    const validated = claimFoodSchema.parse(req.body);
+    const { foodId } = validated;
+
     const user = req.user;
     if (!user) {
       return res.status(401).json({
@@ -302,21 +314,9 @@ export const claimFood = async (req: Request, res: Response) => {
       });
     }
 
-    const { foodId } = req.body;
-    if (!foodId) {
-      return res.status(400).json({
-        message: '食物ID为必填项',
-        errorCode: 'food/missing-food-id'
-      });
-    }
-
-    // 查找食物，关联发布者和可能的认领记录
     const food = await prisma.food.findUnique({
       where: { id: foodId },
-      include: {
-        User: true,   // 发布者
-        Claim: true   // 认领记录（一对一）
-      }
+      include: { User: true, Claim: true }
     });
     if (!food) {
       return res.status(404).json({
@@ -325,7 +325,6 @@ export const claimFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 检查食物是否已被认领
     if (food.status !== 'AVAILABLE' || food.Claim) {
       return res.status(400).json({
         message: '该食物已被认领',
@@ -333,7 +332,6 @@ export const claimFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 查找/创建认领者
     let claimant = await prisma.user.findUnique({
       where: { firebaseUid: user.uid }
     });
@@ -348,7 +346,6 @@ export const claimFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 禁止发布者认领自己的食物
     if (food.publisherId === claimant.id) {
       return res.status(403).json({
         message: '禁止认领自己发布的食物',
@@ -356,7 +353,6 @@ export const claimFood = async (req: Request, res: Response) => {
       });
     }
 
-    // 创建认领记录
     const claim = await prisma.claim.create({
       data: {
         id: generateId(),
@@ -367,16 +363,11 @@ export const claimFood = async (req: Request, res: Response) => {
       }
     });
 
-    // 更新食物状态为 CLAIMED
     await prisma.food.update({
       where: { id: foodId },
-      data: {
-        status: 'CLAIMED',
-        updatedAt: new Date(),
-      }
+      data: { status: 'CLAIMED', updatedAt: new Date() }
     });
 
-    // 为发布者创建通知
     await prisma.notification.create({
       data: {
         id: generateId(),
@@ -394,6 +385,12 @@ export const claimFood = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        message: '输入验证失败',
+        errors: error.errors
+      });
+    }
     console.error('认领食物失败：', error);
     return res.status(500).json({
       message: '认领失败',
@@ -424,12 +421,9 @@ export const confirmClaim = async (req: Request, res: Response) => {
       });
     }
 
-    // 查找认领记录，包含关联的食物和食物的发布者
     const claim = await prisma.claim.findUnique({
       where: { id: claimId },
-      include: {
-        Food: { include: { User: true } } // 食物及其发布者
-      }
+      include: { Food: { include: { User: true } } }
     });
     if (!claim) {
       return res.status(404).json({
@@ -438,7 +432,6 @@ export const confirmClaim = async (req: Request, res: Response) => {
       });
     }
 
-    // 验证当前用户是否为食物的发布者
     if (claim.Food.User.firebaseUid !== user.uid) {
       return res.status(403).json({
         message: '无权限确认该认领',
@@ -446,23 +439,15 @@ export const confirmClaim = async (req: Request, res: Response) => {
       });
     }
 
-    // 更新认领状态和食物状态
     await prisma.claim.update({
       where: { id: claimId },
-      data: {
-        status: 'ACCEPTED',
-        updatedAt: new Date(),
-      }
+      data: { status: 'ACCEPTED', updatedAt: new Date() }
     });
     await prisma.food.update({
       where: { id: claim.foodId },
-      data: {
-        status: 'COMPLETED',
-        updatedAt: new Date(),
-      }
+      data: { status: 'COMPLETED', updatedAt: new Date() }
     });
 
-    // 为认领者创建通知
     await prisma.notification.create({
       data: {
         id: generateId(),
@@ -514,9 +499,7 @@ export const getMyPublishedFoods = async (req: Request, res: Response) => {
 
     const foods = await prisma.food.findMany({
       where: { publisherId: dbUser.id },
-      include: {
-        User: { select: { email: true } }
-      },
+      include: { User: { select: { email: true } } },
       orderBy: { createdAt: 'desc' }
     });
 
