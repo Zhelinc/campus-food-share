@@ -71,11 +71,37 @@ const server = app.listen(PORT, () => {
   }
 })();
 
-// 优雅关闭
-process.on('SIGTERM', () => {
+// 优雅关闭 - 修复版本
+process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，开始关闭...');
-  server.close(() => {
-    console.log('服务器已关闭');
+  
+  server.close(async () => {
+    try {
+      // 关闭数据库连接
+      await prisma.$disconnect();
+      console.log('✅ 数据库连接已关闭');
+    } catch (error) {
+      console.error('❌ 数据库断开连接失败:', error);
+    }
+    
+    console.log('✅ 应用已完全关闭');
+    process.exit(0);
+  });
+});
+
+// 同样处理 SIGINT（Ctrl+C）
+process.on('SIGINT', async () => {
+  console.log('收到 SIGINT 信号，开始关闭...');
+  
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log('✅ 数据库连接已关闭');
+    } catch (error) {
+      console.error('❌ 数据库断开连接失败:', error);
+    }
+    
+    console.log('✅ 应用已完全关闭');
     process.exit(0);
   });
 });

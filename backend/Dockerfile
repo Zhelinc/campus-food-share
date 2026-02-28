@@ -4,8 +4,7 @@ WORKDIR /src
 COPY package*.json ./  
 RUN npm install  
 COPY . .  
-RUN rm -rf node_modules/.prisma  # 删除旧的 Prisma 缓存  
-RUN npm run build  
+RUN rm -rf node_modules/.prisma  
 RUN npm run prisma:generate  
 FROM node:22  
 LABEL "language"="nodejs"  
