@@ -1,6 +1,13 @@
+// frontend/src/pages/Login.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { login, register } from '../api/user';
+import { auth } from '../firebase'; // 导入 Firebase 认证实例
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  sendEmailVerification 
+} from 'firebase/auth';
+import { login as apiLogin, register as apiRegister } from '../api/user';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -9,29 +16,68 @@ const Login = () => {
   const [isRegister, setIsRegister] = useState(false);
   const [role, setRole] = useState('user');
   const [invitationCode, setInvitationCode] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (isRegister && password !== confirmPassword) {
-      alert('两次输入的密码不一致');
-      return;
-    }
+    setLoading(true);
 
     try {
       if (isRegister) {
-        const res = await register(email, password, confirmPassword, role, invitationCode);
-        alert('注册成功！即将自动登录');
-        localStorage.setItem('token', res.token);
-        window.location.href = '/';
+        // 注册模式
+        if (password !== confirmPassword) {
+          alert('两次输入的密码不一致');
+          setLoading(false);
+          return;
+        }
+
+        // 1. 在 Firebase 创建用户
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const firebaseUser = userCredential.user;
+
+        // 2. 发送验证邮件
+        await sendEmailVerification(firebaseUser);
+        alert('注册成功！验证邮件已发送至您的邮箱，请查收并验证。');
+
+        // 3. 将用户信息同步到后端数据库
+        await apiRegister(email, role, invitationCode, firebaseUser.uid);
+
+        // 提示用户去验证邮箱，不自动登录
+        setIsRegister(false); // 切换回登录表单
+        setEmail('');
+        setPassword('');
       } else {
-        const res = await login(email, password);
+        // 登录模式
+        // 1. Firebase 登录
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 2. 检查邮箱是否已验证
+        if (!user.emailVerified) {
+          alert('您的邮箱尚未验证，请先查收邮件并完成验证。');
+          // 可选：重新发送验证邮件
+          // await sendEmailVerification(user);
+          setLoading(false);
+          return;
+        }
+
+        // 3. 获取 Firebase ID Token
+        const idToken = await user.getIdToken();
+
+        // 4. 调用后端登录接口，验证 token 并获取用户信息
+        const res = await apiLogin(idToken);
+        localStorage.setItem('token', res.token); // 后端返回的 token（如果有）
+        // 注意：后续请求可使用 Firebase ID Token 或后端返回的 token，取决于你的设计。
+        // 这里假设后端返回了一个 token 供后续请求使用，与之前一致。
+
         alert('登录成功！');
-        localStorage.setItem('token', res.token);
         window.location.href = '/';
       }
-    } catch (err) {
-      alert(err.response?.data?.message || '操作失败，请重试');
+    } catch (error) {
+      console.error('认证失败:', error);
+      alert('操作失败：' + (error.message || '请稍后重试'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -58,7 +104,7 @@ const Login = () => {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="至少6位，含大小写、数字、特殊字符"
+            placeholder="至少6位"
             style={{ width: '100%', padding: '8px', marginTop: '5px' }}
             required
           />
@@ -120,6 +166,7 @@ const Login = () => {
 
         <button
           type="submit"
+          disabled={loading}
           style={{
             width: '100%',
             padding: '10px',
@@ -128,14 +175,14 @@ const Login = () => {
             border: 'none',
             borderRadius: '4px',
             cursor: 'pointer',
-            marginTop: '10px'
+            marginTop: '10px',
+            opacity: loading ? 0.6 : 1
           }}
         >
-          {isRegister ? '注册' : '登录'}
+          {loading ? '处理中...' : (isRegister ? '注册' : '登录')}
         </button>
       </form>
 
-      {/* 忘记密码链接（仅登录模式显示） */}
       {!isRegister && (
         <p style={{ textAlign: 'center', marginTop: '10px' }}>
           <Link to="/forgot-password" style={{ color: '#0088ff' }}>忘记密码？</Link>
