@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:22 AS builder
 LABEL "language"="nodejs"
 
 WORKDIR /src
@@ -10,7 +10,7 @@ COPY . .
 RUN npm run build
 RUN npm run prisma:generate
 
-FROM node:22-slim
+FROM node:22
 LABEL "language"="nodejs"
 
 WORKDIR /src
