@@ -3,9 +3,6 @@ LABEL "language"="nodejs"
 
 WORKDIR /src
 
-# 强制 Prisma 生成 glibc 版本的二进制文件
-ENV PRISMA_CLI_BINARY_TARGETS=linux-x64
-
 COPY package*.json ./
 RUN npm install
 
@@ -17,9 +14,6 @@ FROM node:22-slim
 LABEL "language"="nodejs"
 
 WORKDIR /src
-
-# 强制 Prisma 使用 glibc 版本的二进制文件
-ENV PRISMA_CLI_BINARY_TARGETS=linux-x64
 
 COPY package*.json ./
 RUN npm install --omit=dev
